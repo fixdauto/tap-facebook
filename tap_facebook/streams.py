@@ -204,6 +204,7 @@ class AdsInsightStream(FacebookStream):
         row: dict,
         context: dict | None = None,  # noqa: ARG002
     ) -> dict | None:
+        if "unique_inline_link_clicks" in row: row["unique_inline_link_clicks"] = int(row["unique_inline_link_clicks"])
         if "inline_link_clicks" in row: row["inline_link_clicks"] = int(row["inline_link_clicks"])
         if "impressions" in row: row["impressions"] = int(row["impressions"])
         if "reach" in row: row["reach"] = int(row["reach"])
