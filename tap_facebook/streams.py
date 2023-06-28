@@ -120,7 +120,7 @@ class AdsInsightStream(FacebookStream):
         Property("frequency", StringType),
         Property("account_name", StringType),
         Property("canvas_avg_view_time", StringType),
-        Property("unique_inline_link_clicks", StringType),
+        Property("unique_inline_link_clicks", IntegerType),
         Property(
             "cost_per_unique_action_type",
             ArrayType(
@@ -204,9 +204,9 @@ class AdsInsightStream(FacebookStream):
         row: dict,
         context: dict | None = None,  # noqa: ARG002
     ) -> dict | None:
-        row["inline_link_clicks"] = int(row["inline_link_clicks"])
-        row["impressions"] = int(row["impressions"])
-        row["reach"] = int(row["reach"])
+        # row["inline_link_clicks"] = int(row["inline_link_clicks"])
+        # row["impressions"] = int(row["impressions"])
+        # row["reach"] = int(row["reach"])
         return row
 
 
