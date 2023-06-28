@@ -94,6 +94,7 @@ class FacebookStream(RESTStream):
         if self.replication_key:
             params["sort"] = "asc"
             params["order_by"] = self.replication_key
+        params["time_range"] = {'since': self.config["start_date"],'until': self.config["end_date"]}
 
         return params
 
