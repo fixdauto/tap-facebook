@@ -195,7 +195,7 @@ class AdsInsightStream(FacebookStream):
             params["sort"] = "asc"
             params["order_by"] = self.replication_key
 
-        params["action_attribution_windows"] = '["1d_view","7d_click"]'
+        # params["action_attribution_windows"] = '["1d_view","7d_click"]'
 
         return params
 
