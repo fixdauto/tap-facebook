@@ -987,6 +987,7 @@ class CampaignStream(FacebookStream):
     ) -> dict:
         daily_budget = row.get("daily_budget")
         row["daily_budget"] = int(daily_budget) if daily_budget is not None else None
+        if "lifetime_budget" in row: row["lifetime_budget"] = int(row["lifetime_budget"])
         return row
 
 
