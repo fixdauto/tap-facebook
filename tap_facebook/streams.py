@@ -195,8 +195,8 @@ class AdsInsightStream(FacebookStream):
             params["sort"] = "asc"
             params["order_by"] = self.replication_key
 
-        # params["action_attribution_windows"] = '["1d_view","7d_click"]'
-        params["date_preset"] = 'this_year'
+        params["time_range"] = "{" + f"'since': '{self.config['start_date']}','until': '{self.config['end_date']}'" + "}"
+        params["time_increment"] = self.config['time_increment_days']
 
         return params
 
