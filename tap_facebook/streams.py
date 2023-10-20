@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import typing as t
 from pathlib import Path
+from datetime import datetime, timedelta, date
+import pytz
+from dateutil.parser import isoparse
 
-from singer_sdk import typing as th  # JSON Schema typing helpers
+from singer_sdk import metrics, typing as th  # JSON Schema typing helpers
 from singer_sdk.typing import (
     ArrayType,
     BooleanType,
@@ -141,7 +144,15 @@ class AdsInsightStream(FacebookStream):
         Property("cost_per_inline_post_engagement", StringType),
         Property("inline_link_click_ctr", StringType),
         Property("cpp", StringType),
-        Property("cost_per_action_type", ArrayType(ObjectType())),
+        Property(
+            "cost_per_action_type",
+            ArrayType(
+                ObjectType(
+                    Property("value", StringType),
+                    Property("action_type", StringType),
+                )
+            ),
+        ),
         Property("unique_link_clicks_ctr", StringType),
         Property("spend", StringType),
         Property("cost_per_unique_click", StringType),
@@ -173,10 +184,40 @@ class AdsInsightStream(FacebookStream):
 
     tap_stream_id = "adsinsights"
 
+    @staticmethod
+    def date_range(start_date, end_date, interval_in_days=1):
+        """
+        Generator function that produces an iterable list of days between the two
+        dates start_date and end_date as a tuple pair of datetimes.
+
+        Args:
+            start_date (datetime): start of period
+            end_date (datetime): end of period
+            interval_in_days (int): interval of days to iter over
+
+        Yields:
+            tuple: daily period
+                * datetime: day within range - interval_in_days
+                * datetime: day within range + interval_in_days
+
+        """
+        current_date = start_date
+        while current_date < end_date:
+            interval_start = current_date
+            interval_end = current_date + timedelta(days=interval_in_days)
+            
+            if interval_end > end_date:
+                interval_end = end_date
+            
+            yield interval_start.strftime("%Y-%m-%d"), interval_end.strftime("%Y-%m-%d")
+            current_date = interval_end
+
     def get_url_params(
         self,
         context: dict | None,  # noqa: ARG002
         next_page_token: t.Any | None,
+        start_timestamp: str,
+        end_timestamp: str,
     ) -> dict[str, t.Any]:
         """Return a dictionary of values to be used in URL parameterization.
 
@@ -195,20 +236,98 @@ class AdsInsightStream(FacebookStream):
             params["sort"] = "asc"
             params["order_by"] = self.replication_key
 
-        params["time_range"] = "{" + f"'since': '{self.config['start_date']}','until': '{self.config['end_date']}'" + "}"
-        params["time_increment"] = self.config['time_increment_days']
+        self.logger.info(f" tap_states: {self.tap_state}")
+
+        params["time_range"] = (
+            "{"
+            + f"'since': '{start_timestamp}','until': '{end_timestamp}'"
+            + "}"
+        )
+        params["time_increment"] = self.config["time_increment_days"]
 
         return params
+    
+    def prepare_request(self, context: Optional[dict], next_page_token, start_timestamp, end_timestamp) -> requests.PreparedRequest:
+        """Prepare a request object for this stream.
+
+        If partitioning is supported, the `context` object will contain the partition
+        definitions. Pagination information can be parsed from `next_page_token` if
+        `next_page_token` is not None.
+
+        Args:
+            context: Stream partition or context dictionary.
+            next_page_token: Token, page number or any request argument to request the
+                next page of data.
+
+        Returns:
+            Build a request with the stream's URL, path, query parameters,
+            HTTP headers and authenticator.
+        """
+        http_method = self.rest_method
+        url: str = self.get_url(context)
+        params: dict | str = self.get_url_params(context, next_page_token, start_timestamp, end_timestamp)
+        request_data = self.prepare_request_payload(context, next_page_token)
+        headers = self.http_headers
+
+        return self.build_prepared_request(
+            method=http_method,
+            url=url,
+            params=params,
+            headers=headers,
+            json=request_data,
+        )
+    
+    def request_records(self, context: dict | None) -> t.Iterable[dict]:
+        """Request records from REST endpoint(s), returning response records.
+
+        If pagination is detected, pages will be recursed automatically.
+
+        Args:
+            context: Stream partition or context dictionary.
+
+        Yields:
+            An item for every record in the response.
+        """
+        decorated_request = self.request_decorator(self._request)
+
+        with metrics.http_request_counter(self.name, self.path) as request_counter:
+            request_counter.context = context
+            start_timestamp = isoparse(self.start_date)
+            start_timestamp = start_timestamp.replace(tzinfo=pytz.timezone('UTC'))
+            end_timestamp = isoparse(self.end_date)
+            end_timestamp = end_timestamp.replace(tzinfo=pytz.timezone('UTC'))
+            self.logger.info(f'Beginning timestamp is: {start_timestamp} and end timestamp is: {end_timestamp}')
+
+            for start, end in self.date_range(start_timestamp, end_timestamp, interval_in_days=self.config['time_increment_days']):
+                paginator = self.get_new_paginator()
+                while not paginator.finished:
+                    self.logger.info(f'Getting data from {start} to {end}')
+                    prepared_request = self.prepare_request(
+                        context,
+                        next_page_token=paginator.current_value,
+                        start_timestamp=start,
+                        end_timestamp=end
+                    )
+                    resp = decorated_request(prepared_request, context)
+                    request_counter.increment()
+                    self.update_sync_costs(prepared_request, resp, context)
+                    yield from self.parse_response(resp)
+
+                    paginator.advance(resp)
 
     def post_process(
         self,
         row: dict,
         context: dict | None = None,  # noqa: ARG002
     ) -> dict | None:
-        if "unique_inline_link_clicks" in row: row["unique_inline_link_clicks"] = int(row["unique_inline_link_clicks"])
-        if "inline_link_clicks" in row: row["inline_link_clicks"] = int(row["inline_link_clicks"])
-        if "impressions" in row: row["impressions"] = int(row["impressions"])
-        if "reach" in row: row["reach"] = int(row["reach"])
+        if "unique_inline_link_clicks" in row:
+            row["unique_inline_link_clicks"] = int(row["unique_inline_link_clicks"])
+        if "inline_link_clicks" in row:
+            row["inline_link_clicks"] = int(row["inline_link_clicks"])
+        if "impressions" in row:
+            row["impressions"] = int(row["impressions"])
+        if "reach" in row:
+            row["reach"] = int(row["reach"])
         return row
 
 
@@ -230,19 +349,19 @@ class AdsStream(FacebookStream):
         "adset_id",
         "campaign_id",
         "bid_type",
-        "bid_info",
+        # "bid_info",
         "status",
         "updated_time",
         "created_time",
         "name",
         "effective_status",
-        "last_updated_by_app_id",
+        # "last_updated_by_app_id",
         "source_ad_id",
         "creative",
         "tracking_specs",
         "conversion_specs",
-        "recommendations",
-        "configured_status",
+        # "recommendations",
+        # "configured_status",
         "conversion_domain",
         "bid_amount",
     ]
@@ -274,16 +393,16 @@ class AdsStream(FacebookStream):
             ),
         ),
         Property("bid_amount", IntegerType),
-        Property(
-            "bid_info",
-            ObjectType(
-                Property("CLICKS", IntegerType),
-                Property("ACTIONS", IntegerType),
-                Property("REACH", IntegerType),
-                Property("IMPRESSIONS", IntegerType),
-                Property("SOCIAL", IntegerType),
-            ),
-        ),
+        # Property(
+        #     "bid_info",
+        #     ObjectType(
+        #         Property("CLICKS", IntegerType),
+        #         Property("ACTIONS", IntegerType),
+        #         Property("REACH", IntegerType),
+        #         Property("IMPRESSIONS", IntegerType),
+        #         Property("SOCIAL", IntegerType),
+        #     ),
+        # ),
         Property("status", StringType),
         Property(
             "creative",
@@ -294,20 +413,20 @@ class AdsStream(FacebookStream):
         Property("created_time", StringType),
         Property("name", StringType),
         Property("effective_status", StringType),
-        Property("last_updated_by_app_id", StringType),
-        Property(
-            "recommendations",
-            ArrayType(
-                ObjectType(
-                    Property("blame_field", StringType),
-                    Property("code", IntegerType),
-                    Property("confidence", StringType),
-                    Property("importance", StringType),
-                    Property("message", StringType),
-                    Property("title", StringType),
-                ),
-            ),
-        ),
+        # Property("last_updated_by_app_id", StringType),
+        # Property(
+        #     "recommendations",
+        #     ArrayType(
+        #         ObjectType(
+        #             Property("blame_field", StringType),
+        #             Property("code", IntegerType),
+        #             Property("confidence", StringType),
+        #             Property("importance", StringType),
+        #             Property("message", StringType),
+        #             Property("title", StringType),
+        #         ),
+        #     ),
+        # ),
         Property("source_ad_id", StringType),
         Property(
             "tracking_specs",
@@ -363,83 +482,83 @@ class AdsStream(FacebookStream):
                 ),
             ),
         ),
-        Property("placement_specific_facebook_unsafe_substances", StringType),
-        Property("placement_specific_instagram_unsafe_substances", StringType),
-        Property("global_unsafe_substances", StringType),
-        Property("placement_specific_instagram_personal_attributes", StringType),
-        Property("global_personal_attributes", StringType),
-        Property("placement_specific_facebook_personal_attributes", StringType),
-        Property("placement_specific_instagram_nonexistent_functionality", StringType),
-        Property("global_nonexistent_functionality", StringType),
-        Property("placement_specific_facebook_nonexistent_functionality", StringType),
-        Property("placement_specific_facebook_advertising_policies", StringType),
-        Property("global_advertising_policies", StringType),
-        Property("global_spyware_or_malware", StringType),
-        Property("placement_specific_instagram_spyware_or_malware", StringType),
-        Property("placement_specific_facebook_spyware_or_malware", StringType),
-        Property("placement_specific_instagram_unrealistic_outcomes", StringType),
-        Property("global_unrealistic_outcomes", StringType),
-        Property("placement_specific_facebook_unrealistic_outcomes", StringType),
-        Property("placement_specific_facebook_brand_usage_in_ads", StringType),
-        Property("global_brand_usage_in_ads", StringType),
-        Property("global_personal_health_and_appearance", StringType),
-        Property(
-            "placement_specific_facebook_personal_health_and_appearance",
-            StringType,
-        ),
-        Property(
-            "placement_specific_instagram_personal_health_and_appearance",
-            StringType,
-        ),
-        Property(
-            "placement_specific_instagram_illegal_products_or_services",
-            StringType,
-        ),
-        Property("global_illegal_products_or_services", StringType),
-        Property(
-            "placement_specific_facebook_illegal_products_or_services",
-            StringType,
-        ),
-        Property("global_non_functional_landing_page", StringType),
-        Property("placement_specific_facebook_non_functional_landing_page", StringType),
-        Property(
-            "placement_specific_instagram_non_functional_landing_page",
-            StringType,
-        ),
-        Property(
-            "placement_specific_instagram_commercial_exploitation_of_crises_and_controversial_events",
-            StringType,
-        ),
-        Property(
-            "placement_specific_facebook_commercial_exploitation_of_crises_and_controversial_events",
-            StringType,
-        ),
-        Property(
-            "global_commercial_exploitation_of_crises_and_controversial_events",
-            StringType,
-        ),
-        Property("global_discriminatory_practices", StringType),
-        Property("placement_specific_facebook_discriminatory_practices", StringType),
-        Property("global_circumventing_systems", StringType),
-        Property("placement_specific_facebook_circumventing_systems", StringType),
-        Property("placement_specific_instagram_circumventing_systems", StringType),
-        Property("placement_specific_facebook_adult_content", StringType),
-        Property("placement_specific_facebook_sensational_content", StringType),
-        Property("global_adult_content", StringType),
-        Property("global_sensational_content", StringType),
-        Property("placement_specific_instagram_adult_content", StringType),
-        Property("placement_specific_instagram_brand_usage_in_ads", StringType),
-        Property("placement_specific_instagram_sensational_content", StringType),
-        Property(
-            "placement_specific_facebook_ads_about_social_issues_elections_or_politics",
-            StringType,
-        ),
-        Property(
-            "placement_specific_instagram_ads_about_social_issues_elections_or_politics",
-            StringType,
-        ),
-        Property("global_ads_about_social_issues_elections_or_politics", StringType),
-        Property("configured_status", StringType),
+        # Property("placement_specific_facebook_unsafe_substances", StringType),
+        # Property("placement_specific_instagram_unsafe_substances", StringType),
+        # Property("global_unsafe_substances", StringType),
+        # Property("placement_specific_instagram_personal_attributes", StringType),
+        # Property("global_personal_attributes", StringType),
+        # Property("placement_specific_facebook_personal_attributes", StringType),
+        # Property("placement_specific_instagram_nonexistent_functionality", StringType),
+        # Property("global_nonexistent_functionality", StringType),
+        # Property("placement_specific_facebook_nonexistent_functionality", StringType),
+        # Property("placement_specific_facebook_advertising_policies", StringType),
+        # Property("global_advertising_policies", StringType),
+        # Property("global_spyware_or_malware", StringType),
+        # Property("placement_specific_instagram_spyware_or_malware", StringType),
+        # Property("placement_specific_facebook_spyware_or_malware", StringType),
+        # Property("placement_specific_instagram_unrealistic_outcomes", StringType),
+        # Property("global_unrealistic_outcomes", StringType),
+        # Property("placement_specific_facebook_unrealistic_outcomes", StringType),
+        # Property("placement_specific_facebook_brand_usage_in_ads", StringType),
+        # Property("global_brand_usage_in_ads", StringType),
+        # Property("global_personal_health_and_appearance", StringType),
+        # Property(
+        #     "placement_specific_facebook_personal_health_and_appearance",
+        #     StringType,
+        # ),
+        # Property(
+        #     "placement_specific_instagram_personal_health_and_appearance",
+        #     StringType,
+        # ),
+        # Property(
+        #     "placement_specific_instagram_illegal_products_or_services",
+        #     StringType,
+        # ),
+        # Property("global_illegal_products_or_services", StringType),
+        # Property(
+        #     "placement_specific_facebook_illegal_products_or_services",
+        #     StringType,
+        # ),
+        # Property("global_non_functional_landing_page", StringType),
+        # Property("placement_specific_facebook_non_functional_landing_page", StringType),
+        # Property(
+        #     "placement_specific_instagram_non_functional_landing_page",
+        #     StringType,
+        # ),
+        # Property(
+        #     "placement_specific_instagram_commercial_exploitation_of_crises_and_controversial_events",
+        #     StringType,
+        # ),
+        # Property(
+        #     "placement_specific_facebook_commercial_exploitation_of_crises_and_controversial_events",
+        #     StringType,
+        # ),
+        # Property(
+        #     "global_commercial_exploitation_of_crises_and_controversial_events",
+        #     StringType,
+        # ),
+        # Property("global_discriminatory_practices", StringType),
+        # Property("placement_specific_facebook_discriminatory_practices", StringType),
+        # Property("global_circumventing_systems", StringType),
+        # Property("placement_specific_facebook_circumventing_systems", StringType),
+        # Property("placement_specific_instagram_circumventing_systems", StringType),
+        # Property("placement_specific_facebook_adult_content", StringType),
+        # Property("placement_specific_facebook_sensational_content", StringType),
+        # Property("global_adult_content", StringType),
+        # Property("global_sensational_content", StringType),
+        # Property("placement_specific_instagram_adult_content", StringType),
+        # Property("placement_specific_instagram_brand_usage_in_ads", StringType),
+        # Property("placement_specific_instagram_sensational_content", StringType),
+        # Property(
+        #     "placement_specific_facebook_ads_about_social_issues_elections_or_politics",
+        #     StringType,
+        # ),
+        # Property(
+        #     "placement_specific_instagram_ads_about_social_issues_elections_or_politics",
+        #     StringType,
+        # ),
+        # Property("global_ads_about_social_issues_elections_or_politics", StringType),
+        # Property("configured_status", StringType),
         Property("conversion_domain", StringType),
         Property(
             "conversion_specs",
@@ -450,7 +569,7 @@ class AdsStream(FacebookStream):
                 ),
             ),
         ),
-        Property("placement_specific_instagram_advertising_policies", StringType),
+        # Property("placement_specific_instagram_advertising_policies", StringType),
         Property("recommendation_data", ArrayType(Property("items", StringType))),
         Property("application", ArrayType(Property("items", StringType))),
         Property("dataset", ArrayType(Property("items", StringType))),
@@ -987,7 +1106,8 @@ class CampaignStream(FacebookStream):
     ) -> dict:
         daily_budget = row.get("daily_budget")
         row["daily_budget"] = int(daily_budget) if daily_budget is not None else None
-        if "lifetime_budget" in row: row["lifetime_budget"] = int(row["lifetime_budget"])
+        if "lifetime_budget" in row:
+            row["lifetime_budget"] = int(row["lifetime_budget"])
         return row
 
 
@@ -1110,49 +1230,49 @@ class CreativeStream(FacebookStream):
         Property("source_instagram_media_id", StringType),
         Property("status", StringType),
         Property("template_url", StringType),
-        Property("thumbnail_id", StringType),
-        Property("thumbnail_url", StringType),
+        # Property("thumbnail_id", StringType),
+        # Property("thumbnail_url", StringType),
         Property("title", StringType),
         Property("url_tags", StringType),
-        Property("use_page_actor_override", BooleanType),
+        # Property("use_page_actor_override", BooleanType),
         Property("video_id", StringType),
-        Property("template_app_link_spec_android", ArrayType(StringType)),
-        Property("template_app_link_spec_ios", ArrayType(StringType)),
-        Property("template_app_link_spec_ipad", ArrayType(StringType)),
-        Property("template_app_link_spec_iphone", ArrayType(StringType)),
+        # Property("template_app_link_spec_android", ArrayType(StringType)),
+        # Property("template_app_link_spec_ios", ArrayType(StringType)),
+        # Property("template_app_link_spec_ipad", ArrayType(StringType)),
+        # Property("template_app_link_spec_iphone", ArrayType(StringType)),
         Property("template_caption", StringType),
         Property("template_child_attachments", ArrayType(StringType)),
         Property("template_description", StringType),
         Property("template_link", StringType),
         Property("template_message", StringType),
         Property("template_page_link", StringType),
-        Property("template_url_spec_android_app_name", StringType),
-        Property("template_url_spec_android_package", StringType),
-        Property("template_url_spec_android_url", StringType),
-        Property("template_url_spec_config_app_id", StringType),
-        Property("template_url_spec_ios_app_name", StringType),
-        Property("template_url_spec_ios_app_store_id", StringType),
-        Property("template_url_spec_ios_url", StringType),
-        Property("template_url_spec_ipad_app_name", StringType),
-        Property("template_url_spec_ipad_app_store_id", StringType),
-        Property("template_url_spec_ipad_url", StringType),
-        Property("template_url_spec_iphone_app_name", StringType),
-        Property("template_url_spec_iphone_app_store_id", StringType),
-        Property("template_url_spec_iphone_url", StringType),
-        Property("template_url_spec_web_should_fallback", StringType),
-        Property("template_url_spec_web_url", StringType),
-        Property("template_url_spec_windows_phone_app_id", StringType),
-        Property("template_url_spec_windows_phone_app_name", StringType),
-        Property("template_url_spec_windows_phone_url", StringType),
-        Property(
-            "platform_customizations_instagram_caption_ids",
-            ArrayType(StringType),
-        ),
-        Property("platform_customizations_instagram_image_hash", StringType),
-        Property("platform_customizations_instagram_image_url", StringType),
-        Property("platform_customizations_instagram_video_id", IntegerType),
-        Property("object_story_link_data_caption", StringType),
-        Property("object_story_link_data_description", StringType),
+        # Property("template_url_spec_android_app_name", StringType),
+        # Property("template_url_spec_android_package", StringType),
+        # Property("template_url_spec_android_url", StringType),
+        # Property("template_url_spec_config_app_id", StringType),
+        # Property("template_url_spec_ios_app_name", StringType),
+        # Property("template_url_spec_ios_app_store_id", StringType),
+        # Property("template_url_spec_ios_url", StringType),
+        # Property("template_url_spec_ipad_app_name", StringType),
+        # Property("template_url_spec_ipad_app_store_id", StringType),
+        # Property("template_url_spec_ipad_url", StringType),
+        # Property("template_url_spec_iphone_app_name", StringType),
+        # Property("template_url_spec_iphone_app_store_id", StringType),
+        # Property("template_url_spec_iphone_url", StringType),
+        # Property("template_url_spec_web_should_fallback", StringType),
+        # Property("template_url_spec_web_url", StringType),
+        # Property("template_url_spec_windows_phone_app_id", StringType),
+        # Property("template_url_spec_windows_phone_app_name", StringType),
+        # Property("template_url_spec_windows_phone_url", StringType),
+        # Property(
+        #     "platform_customizations_instagram_caption_ids",
+        #     ArrayType(StringType),
+        # ),
+        # Property("platform_customizations_instagram_image_hash", StringType),
+        # Property("platform_customizations_instagram_image_url", StringType),
+        # Property("platform_customizations_instagram_video_id", IntegerType),
+        # Property("object_story_link_data_caption", StringType),
+        # Property("object_story_link_data_description", StringType),
         Property("product_set_id", StringType),
         Property("carousel_ad_link", StringType),
     ).to_dict()
@@ -1172,7 +1292,7 @@ class CreativeStream(FacebookStream):
             A dictionary of URL query parameters.
         """
         params: dict = {}
-        params["limit"] = 25
+        params["limit"] = 20
         if next_page_token is not None:
             params["after"] = next_page_token
         if self.replication_key:

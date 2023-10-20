@@ -6,6 +6,8 @@ import typing as t
 from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import urlparse
+from datetime import datetime, timedelta
+import pytz
 
 from singer_sdk.authenticators import BearerTokenAuthenticator
 from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
@@ -34,6 +36,22 @@ class FacebookStream(RESTStream):
     next_page_token_jsonpath = "$.paging.cursors.after"  # noqa: S105
 
     tolerated_http_errors: list[int] = []
+
+    @property
+    def start_date(self):
+        if "start_date" in self.config.keys():
+            return self.config["start_date"]
+        else:
+            start_date = datetime.utcnow().replace(tzinfo=pytz.timezone('UTC')) - timedelta(14)
+            return start_date.strftime("%Y-%m-%d")
+        
+    @property
+    def end_date(self):
+        if "end_date" in self.config.keys():
+            return self.config["end_date"]
+        else:
+            end_date = datetime.utcnow().replace(tzinfo=pytz.timezone('UTC'))
+            return end_date.strftime("%Y-%m-%d")
 
     @property
     def authenticator(self) -> BearerTokenAuthenticator:
@@ -167,4 +185,4 @@ class FacebookStream(RESTStream):
         Returns:
             int: limit
         """
-        return 1
+        return 10
