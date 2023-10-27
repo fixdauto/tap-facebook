@@ -19,6 +19,7 @@ from tap_facebook.streams import (
     CreativeStream,
     CustomAudiences,
     CustomConversions,
+    CampaignsInsightsStream,
 )
 
 STREAM_TYPES = [
@@ -33,6 +34,7 @@ STREAM_TYPES = [
     CustomAudiences,
     AdImages,
     AdVideos,
+    CampaignsInsightsStream,
 ]
 
 if t.TYPE_CHECKING:
