@@ -305,11 +305,11 @@ class CampaignsInsightsStream(FacebookStream):
         "conversion_rate_ranking",
         "impressions",
         "cost_per_inline_link_click",
+        "video_p100_watched_actions",
     ]
 
     columns_remaining = [
         "unique_actions",
-        "actions",
         "action_values",
         "outbound_clicks",
         "unique_outbound_clicks",
@@ -317,7 +317,6 @@ class CampaignsInsightsStream(FacebookStream):
         "video_p25_watched_actions",
         "video_p50_watched_actions",
         "video_p75_watched_actions",
-        "video_p100_watched_actions",
     ]
 
     name = "campaignsinsights"
@@ -362,6 +361,15 @@ class CampaignsInsightsStream(FacebookStream):
         Property("conversion_rate_ranking", StringType),
         Property("impressions", IntegerType),
         Property("reach", IntegerType),
+        Property(
+            "video_p100_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
         Property(
             "actions",
             ArrayType(
