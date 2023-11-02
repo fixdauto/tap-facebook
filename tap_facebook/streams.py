@@ -306,11 +306,12 @@ class CampaignsInsightsStream(FacebookStream):
         "impressions",
         "cost_per_inline_link_click",
         "video_p100_watched_actions",
+        "video_thruplay_watched_actions",
+        "action_values",
     ]
 
     columns_remaining = [
         "unique_actions",
-        "action_values",
         "outbound_clicks",
         "unique_outbound_clicks",
         "video_30_sec_watched_actions",
@@ -371,7 +372,25 @@ class CampaignsInsightsStream(FacebookStream):
             ),
         ),
         Property(
+            "video_thruplay_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
             "actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
+            "action_values",
             ArrayType(
                 ObjectType(
                     Property("action_type", StringType),
