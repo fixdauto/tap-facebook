@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, date
 import pytz
 from dateutil.parser import isoparse
 import json
+import time
 
 from singer_sdk import metrics, typing as th  # JSON Schema typing helpers
 from singer_sdk.typing import (
@@ -503,6 +504,10 @@ class AdsInsightsHourlyStream(FacebookStream):
                         end_timestamp=end,
                     )
                     resp = decorated_request(prepared_request, context)
+                    throttle_headers = json.loads(resp.headers['x-fb-ads-insights-throttle'])
+                    if throttle_headers['app_id_util_pct'] >= 99.0:
+                        self.logger.info(f"Getting close to the rate limit. Cooling off for a minute...")
+                        time.sleep(60)
                     request_counter.increment()
                     self.update_sync_costs(prepared_request, resp, context)
                     yield from self.parse_response(resp)
@@ -1081,6 +1086,10 @@ class CampaignsInsightsHourlyStream(FacebookStream):
                         end_timestamp=end,
                     )
                     resp = decorated_request(prepared_request, context)
+                    throttle_headers = json.loads(resp.headers['x-fb-ads-insights-throttle'])
+                    if throttle_headers['app_id_util_pct'] >= 99.0:
+                        self.logger.info(f"Getting close to the rate limit. Cooling off for a minute...")
+                        time.sleep(60)
                     request_counter.increment()
                     self.update_sync_costs(prepared_request, resp, context)
                     yield from self.parse_response(resp)
