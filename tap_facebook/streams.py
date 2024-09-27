@@ -46,9 +46,10 @@ class AdsInsightsStream(FacebookStream):
         "ad_id",
         "adset_id",
         "campaign_id",
+        "campaign_name",
         "ad_name",
         "adset_name",
-        "campaign_name",
+        "actions",
         "date_start",
         "date_stop",
         "clicks",
@@ -68,19 +69,20 @@ class AdsInsightsStream(FacebookStream):
         "engagement_rate_ranking",
         "conversion_rate_ranking",
         "impressions",
+        "cost_per_inline_link_click",
+        "video_p100_watched_actions",
+        "video_thruplay_watched_actions",
+        "action_values",
     ]
 
     columns_remaining = [
         "unique_actions",
-        "actions",
-        "action_values",
         "outbound_clicks",
         "unique_outbound_clicks",
         "video_30_sec_watched_actions",
         "video_p25_watched_actions",
         "video_p50_watched_actions",
         "video_p75_watched_actions",
-        "video_p100_watched_actions",
     ]
 
     name = "adsinsights"
@@ -94,19 +96,31 @@ class AdsInsightsStream(FacebookStream):
     schema = PropertiesList(
         Property("clicks", StringType),
         Property("date_stop", StringType),
-        Property("ad_id", StringType),
-        Property("adset_id", StringType),
+        Property(
+            "website_ctr",
+            ArrayType(
+                ObjectType(
+                    Property("value", StringType),
+                    Property("action_destination", StringType),
+                    Property("action_target_id", StringType),
+                    Property("action_type", StringType),
+                ),
+            ),
+        ),
         Property("frequency", StringType),
         Property("account_name", StringType),
         Property("canvas_avg_view_time", StringType),
         Property("unique_inline_link_clicks", IntegerType),
         Property("inline_post_engagement", StringType),
+        Property("ad_name", StringType),
+        Property("ad_id", StringType),
+        Property("adset_name", StringType),
+        Property("adset_id", StringType),
         Property("campaign_name", StringType),
+        Property("campaign_id", StringType),
         Property("inline_link_clicks", IntegerType),
         Property("campaign_id", StringType),
-        Property("ad_name", StringType),
         Property("spend", StringType),
-        Property("adset_name", StringType),
         Property("unique_clicks", StringType),
         Property("social_spend", StringType),
         Property("canvas_avg_view_percent", StringType),
@@ -118,6 +132,42 @@ class AdsInsightsStream(FacebookStream):
         Property("conversion_rate_ranking", StringType),
         Property("impressions", IntegerType),
         Property("reach", IntegerType),
+        Property(
+            "video_p100_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
+            "video_thruplay_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
+            "actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
+            "action_values",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
     ).to_dict()
 
     tap_stream_id = "adsinsights"
@@ -276,6 +326,7 @@ class AdsInsightsStream(FacebookStream):
             row["reach"] = int(row["reach"])
         return row
 
+
 class AdsInsightsHourlyStream(FacebookStream):
     """https://developers.facebook.com/docs/marketing-api/insights."""
 
@@ -292,49 +343,55 @@ class AdsInsightsHourlyStream(FacebookStream):
         "account_id",
         "ad_id",
         "adset_id",
-        "campaign_id",
         "ad_name",
         "adset_name",
+        "campaign_id",
         "campaign_name",
         "date_start",
         "date_stop",
         "clicks",
-        "frequency",
         "account_name",
-        "unique_inline_link_clicks",
-        "inline_post_engagement",
         "inline_link_clicks",
-        "canvas_avg_view_time",
         "spend",
-        "unique_clicks",
-        "social_spend",
-        "reach",
-        "canvas_avg_view_percent",
         "objective",
-        "quality_ranking",
-        "engagement_rate_ranking",
-        "conversion_rate_ranking",
         "impressions",
+        "reach",
+        "unique_clicks",
     ]
 
     columns_remaining = [
         "unique_actions",
-        "actions",
-        "action_values",
+        "engagement_rate_ranking",
+        "conversion_rate_ranking",
+        "quality_ranking",
+        "inline_post_engagement",
+        "cost_per_inline_link_click",
+        "canvas_avg_view_percent",
+        "canvas_avg_view_time",
         "outbound_clicks",
+        "social_spend",
+        "frequency",
+        "unique_inline_link_clicks",
         "unique_outbound_clicks",
         "video_30_sec_watched_actions",
         "video_p25_watched_actions",
         "video_p50_watched_actions",
         "video_p75_watched_actions",
         "video_p100_watched_actions",
+        "actions",
+        "action_values",
+        "video_thruplay_watched_actions",
     ]
 
     name = "adsinsightshourly"
 
     path = f"/insights?level=ad&fields={columns}"
 
-    primary_keys = ["ad_id", "date_start", "hourly_stats_aggregated_by_advertiser_time_zone"]
+    primary_keys = [
+        "ad_id",
+        "date_start",
+        "hourly_stats_aggregated_by_advertiser_time_zone",
+    ]
     replication_keys = ["date_start", "hourly_stats_aggregated_by_advertiser_time_zone"]
     replication_method = "incremental"
 
@@ -343,10 +400,8 @@ class AdsInsightsHourlyStream(FacebookStream):
         Property("date_stop", StringType),
         Property("ad_id", StringType),
         Property("adset_id", StringType),
-        Property("frequency", StringType),
         Property("account_name", StringType),
         Property("canvas_avg_view_time", StringType),
-        Property("unique_inline_link_clicks", IntegerType),
         Property("inline_post_engagement", StringType),
         Property("campaign_name", StringType),
         Property("inline_link_clicks", IntegerType),
@@ -354,17 +409,13 @@ class AdsInsightsHourlyStream(FacebookStream):
         Property("ad_name", StringType),
         Property("spend", StringType),
         Property("adset_name", StringType),
-        Property("unique_clicks", StringType),
-        Property("social_spend", StringType),
         Property("canvas_avg_view_percent", StringType),
         Property("account_id", StringType),
         Property("date_start", DateTimeType),
         Property("objective", StringType),
-        Property("quality_ranking", StringType),
-        Property("engagement_rate_ranking", StringType),
-        Property("conversion_rate_ranking", StringType),
         Property("impressions", IntegerType),
         Property("reach", IntegerType),
+        Property("unique_clicks", StringType),
         Property("hourly_stats_aggregated_by_advertiser_time_zone", StringType),
     ).to_dict()
 
@@ -415,7 +466,7 @@ class AdsInsightsHourlyStream(FacebookStream):
             A dictionary of URL query parameters.
         """
         params: dict = {}
-        params["limit"] = 25
+        params["limit"] = 10
         if next_page_token is not None:
             params["after"] = next_page_token
         if self.replication_key:
@@ -429,6 +480,7 @@ class AdsInsightsHourlyStream(FacebookStream):
         )
         params["time_increment"] = self.config["time_increment_days"]
         params["breakdowns"] = "hourly_stats_aggregated_by_advertiser_time_zone"
+        params["use_account_attribution_setting"] = True
 
         return params
 
@@ -455,6 +507,7 @@ class AdsInsightsHourlyStream(FacebookStream):
         params: dict | str = self.get_url_params(
             context, next_page_token, start_timestamp, end_timestamp
         )
+        
         request_data = self.prepare_request_payload(context, next_page_token)
         headers = self.http_headers
 
@@ -504,9 +557,13 @@ class AdsInsightsHourlyStream(FacebookStream):
                         end_timestamp=end,
                     )
                     resp = decorated_request(prepared_request, context)
-                    throttle_headers = json.loads(resp.headers['x-fb-ads-insights-throttle'])
-                    if throttle_headers['app_id_util_pct'] >= 99.0:
-                        self.logger.info(f"Getting close to the rate limit. Cooling off for a minute...")
+                    throttle_headers = json.loads(
+                        resp.headers["x-fb-ads-insights-throttle"]
+                    )
+                    if throttle_headers["app_id_util_pct"] >= 99.0:
+                        self.logger.info(
+                            f"Getting close to the rate limit. Cooling off for a minute..."
+                        )
                         time.sleep(60)
                     request_counter.increment()
                     self.update_sync_costs(prepared_request, resp, context)
@@ -528,6 +585,7 @@ class AdsInsightsHourlyStream(FacebookStream):
         if "reach" in row:
             row["reach"] = int(row["reach"])
         return row
+
 
 class CampaignsInsightsStream(FacebookStream):
     """https://developers.facebook.com/docs/marketing-api/insights."""
@@ -816,7 +874,8 @@ class CampaignsInsightsStream(FacebookStream):
         if "reach" in row:
             row["reach"] = int(row["reach"])
         return row
-    
+
+
 class CampaignsInsightsHourlyStream(FacebookStream):
     """https://developers.facebook.com/docs/marketing-api/insights."""
 
@@ -837,23 +896,12 @@ class CampaignsInsightsHourlyStream(FacebookStream):
         "date_start",
         "date_stop",
         "clicks",
-        "frequency",
         "account_name",
-        "unique_inline_link_clicks",
-        "inline_post_engagement",
         "inline_link_clicks",
-        "canvas_avg_view_time",
         "spend",
-        "unique_clicks",
-        "social_spend",
-        "reach",
-        "canvas_avg_view_percent",
         "objective",
-        "quality_ranking",
-        "engagement_rate_ranking",
-        "conversion_rate_ranking",
         "impressions",
-        "cost_per_inline_link_click",
+        "reach",
         "video_p100_watched_actions",
         "video_thruplay_watched_actions",
         "action_values",
@@ -861,7 +909,18 @@ class CampaignsInsightsHourlyStream(FacebookStream):
 
     columns_remaining = [
         "unique_actions",
+        "engagement_rate_ranking",
+        "conversion_rate_ranking",
+        "quality_ranking",
+        "inline_post_engagement",
+        "cost_per_inline_link_click",
+        "canvas_avg_view_percent",
+        "canvas_avg_view_time",
         "outbound_clicks",
+        "social_spend",
+        "frequency",
+        "unique_clicks",
+        "unique_inline_link_clicks",
         "unique_outbound_clicks",
         "video_30_sec_watched_actions",
         "video_p25_watched_actions",
@@ -873,42 +932,25 @@ class CampaignsInsightsHourlyStream(FacebookStream):
 
     path = f"/insights?level=campaign&fields={columns}"
 
-    primary_keys = ["campaign_id", "date_start", "hourly_stats_aggregated_by_advertiser_time_zone"]
+    primary_keys = [
+        "campaign_id",
+        "date_start",
+        "hourly_stats_aggregated_by_advertiser_time_zone",
+    ]
     replication_keys = ["date_start", "hourly_stats_aggregated_by_advertiser_time_zone"]
     replication_method = "incremental"
 
     schema = PropertiesList(
         Property("clicks", StringType),
         Property("date_stop", StringType),
-        Property(
-            "website_ctr",
-            ArrayType(
-                ObjectType(
-                    Property("value", StringType),
-                    Property("action_destination", StringType),
-                    Property("action_target_id", StringType),
-                    Property("action_type", StringType),
-                ),
-            ),
-        ),
-        Property("frequency", StringType),
         Property("account_name", StringType),
-        Property("canvas_avg_view_time", StringType),
-        Property("unique_inline_link_clicks", IntegerType),
-        Property("inline_post_engagement", StringType),
         Property("campaign_name", StringType),
         Property("inline_link_clicks", IntegerType),
         Property("campaign_id", StringType),
         Property("spend", StringType),
-        Property("unique_clicks", StringType),
-        Property("social_spend", StringType),
-        Property("canvas_avg_view_percent", StringType),
         Property("account_id", StringType),
         Property("date_start", DateTimeType),
         Property("objective", StringType),
-        Property("quality_ranking", StringType),
-        Property("engagement_rate_ranking", StringType),
-        Property("conversion_rate_ranking", StringType),
         Property("impressions", IntegerType),
         Property("reach", IntegerType),
         Property(
@@ -1011,6 +1053,7 @@ class CampaignsInsightsHourlyStream(FacebookStream):
         )
         params["time_increment"] = self.config["time_increment_days"]
         params["breakdowns"] = "hourly_stats_aggregated_by_advertiser_time_zone"
+        params["use_account_attribution_setting"] = True
 
         return params
 
@@ -1086,9 +1129,13 @@ class CampaignsInsightsHourlyStream(FacebookStream):
                         end_timestamp=end,
                     )
                     resp = decorated_request(prepared_request, context)
-                    throttle_headers = json.loads(resp.headers['x-fb-ads-insights-throttle'])
-                    if throttle_headers['app_id_util_pct'] >= 99.0:
-                        self.logger.info(f"Getting close to the rate limit. Cooling off for a minute...")
+                    throttle_headers = json.loads(
+                        resp.headers["x-fb-ads-insights-throttle"]
+                    )
+                    if throttle_headers["app_id_util_pct"] >= 99.0:
+                        self.logger.info(
+                            f"Getting close to the rate limit. Cooling off for a minute..."
+                        )
                         time.sleep(60)
                     request_counter.increment()
                     self.update_sync_costs(prepared_request, resp, context)
@@ -1110,6 +1157,7 @@ class CampaignsInsightsHourlyStream(FacebookStream):
         if "reach" in row:
             row["reach"] = int(row["reach"])
         return row
+
 
 # ads stream
 class AdsStream(FacebookStream):

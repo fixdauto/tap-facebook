@@ -42,15 +42,17 @@ class FacebookStream(RESTStream):
         if "start_date" in self.config.keys():
             return self.config["start_date"]
         else:
-            start_date = datetime.utcnow().replace(tzinfo=pytz.timezone('UTC')) - timedelta(14)
+            start_date = datetime.utcnow().replace(
+                tzinfo=pytz.timezone("UTC")
+            ) - timedelta(1)
             return start_date.strftime("%Y-%m-%d")
-        
+
     @property
     def end_date(self):
         if "end_date" in self.config.keys():
             return self.config["end_date"]
         else:
-            end_date = datetime.utcnow().replace(tzinfo=pytz.timezone('UTC'))
+            end_date = datetime.utcnow().replace(tzinfo=pytz.timezone("UTC"))
             return end_date.strftime("%Y-%m-%d")
 
     @property
