@@ -12,6 +12,8 @@ from tap_facebook.streams import (
     AdImages,
     AdLabelsStream,
     AdsetsStream,
+    AdsetsInsightsStream,
+    AdsetsInsightsHourlyStream,
     AdsInsightsStream,
     AdsInsightsHourlyStream,
     AdsStream,
@@ -26,6 +28,8 @@ from tap_facebook.streams import (
 
 STREAM_TYPES = [
     AdsetsStream,
+    AdsetsInsightsStream,
+    AdsetsInsightsHourlyStream,
     AdsInsightsStream,
     AdsInsightsHourlyStream,
     AdsStream,

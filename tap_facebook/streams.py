@@ -585,6 +585,556 @@ class AdsInsightsHourlyStream(FacebookStream):
         if "reach" in row:
             row["reach"] = int(row["reach"])
         return row
+    
+
+class AdsetsInsightsStream(FacebookStream):
+    """https://developers.facebook.com/docs/marketing-api/insights."""
+
+    """
+    columns: columns which will be added to fields parameter in api
+    name: stream name
+    account_id: facebook account
+    path: path which will be added to api url in client.py
+    schema: instream schema
+    tap_stream_id = stream id
+    """
+
+    columns = [
+        "account_id",
+        "adset_id",
+        "campaign_id",
+        "campaign_name",
+        "adset_name",
+        "actions",
+        "date_start",
+        "date_stop",
+        "clicks",
+        "frequency",
+        "account_name",
+        "unique_inline_link_clicks",
+        "inline_post_engagement",
+        "inline_link_clicks",
+        "canvas_avg_view_time",
+        "spend",
+        "unique_clicks",
+        "social_spend",
+        "reach",
+        "canvas_avg_view_percent",
+        "objective",
+        "quality_ranking",
+        "engagement_rate_ranking",
+        "conversion_rate_ranking",
+        "impressions",
+        "cost_per_inline_link_click",
+        "video_p100_watched_actions",
+        "video_thruplay_watched_actions",
+        "action_values",
+    ]
+
+    columns_remaining = [
+        "unique_actions",
+        "outbound_clicks",
+        "unique_outbound_clicks",
+        "video_30_sec_watched_actions",
+        "video_p25_watched_actions",
+        "video_p50_watched_actions",
+        "video_p75_watched_actions",
+    ]
+
+    name = "adsetsinsights"
+
+    path = f"/insights?level=adset&fields={columns}"
+
+    primary_keys = ["adset_id", "date_start"]
+    replication_keys = ["date_start"]
+    replication_method = "incremental"
+
+    schema = PropertiesList(
+        Property("clicks", StringType),
+        Property("date_stop", StringType),
+        Property(
+            "website_ctr",
+            ArrayType(
+                ObjectType(
+                    Property("value", StringType),
+                    Property("action_destination", StringType),
+                    Property("action_target_id", StringType),
+                    Property("action_type", StringType),
+                ),
+            ),
+        ),
+        Property("frequency", StringType),
+        Property("account_name", StringType),
+        Property("canvas_avg_view_time", StringType),
+        Property("unique_inline_link_clicks", IntegerType),
+        Property("inline_post_engagement", StringType),
+        Property("adset_name", StringType),
+        Property("adset_id", StringType),
+        Property("campaign_name", StringType),
+        Property("campaign_id", StringType),
+        Property("inline_link_clicks", IntegerType),
+        Property("campaign_id", StringType),
+        Property("spend", StringType),
+        Property("unique_clicks", StringType),
+        Property("social_spend", StringType),
+        Property("canvas_avg_view_percent", StringType),
+        Property("account_id", StringType),
+        Property("date_start", DateTimeType),
+        Property("objective", StringType),
+        Property("quality_ranking", StringType),
+        Property("engagement_rate_ranking", StringType),
+        Property("conversion_rate_ranking", StringType),
+        Property("impressions", IntegerType),
+        Property("reach", IntegerType),
+        Property(
+            "video_p100_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
+            "video_thruplay_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
+            "actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
+            "action_values",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+    ).to_dict()
+
+    tap_stream_id = "adsetsinsights"
+
+    @staticmethod
+    def date_range(start_date, end_date, interval_in_days=1):
+        """
+        Generator function that produces an iterable list of days between the two
+        dates start_date and end_date as a tuple pair of datetimes.
+
+        Args:
+            start_date (datetime): start of period
+            end_date (datetime): end of period
+            interval_in_days (int): interval of days to iter over
+
+        Yields:
+            tuple: daily period
+                * datetime: day within range - interval_in_days
+                * datetime: day within range + interval_in_days
+
+        """
+        current_date = start_date
+        while current_date < end_date:
+            interval_start = current_date
+            interval_end = current_date + timedelta(days=interval_in_days)
+
+            if interval_end > end_date:
+                interval_end = end_date
+
+            yield interval_start.strftime("%Y-%m-%d"), interval_end.strftime("%Y-%m-%d")
+            current_date = interval_end
+
+    def get_url_params(
+        self,
+        context: dict | None,  # noqa: ARG002
+        next_page_token: t.Any | None,
+        start_timestamp: str,
+        end_timestamp: str,
+    ) -> dict[str, t.Any]:
+        """Return a dictionary of values to be used in URL parameterization.
+
+        Args:
+            context: The stream context.
+            next_page_token: The next page index or value.
+
+        Returns:
+            A dictionary of URL query parameters.
+        """
+        params: dict = {}
+        params["limit"] = 25
+        if next_page_token is not None:
+            params["after"] = next_page_token
+        if self.replication_key:
+            params["sort"] = "asc"
+            params["order_by"] = self.replication_key
+
+        self.logger.info(f" tap_states: {self.tap_state}")
+
+        params["time_range"] = (
+            "{" + f"'since': '{start_timestamp}','until': '{end_timestamp}'" + "}"
+        )
+        params["time_increment"] = self.config["time_increment_days"]
+
+        return params
+
+    def prepare_request(
+        self, context: Optional[dict], next_page_token, start_timestamp, end_timestamp
+    ) -> requests.PreparedRequest:
+        """Prepare a request object for this stream.
+
+        If partitioning is supported, the `context` object will contain the partition
+        definitions. Pagination information can be parsed from `next_page_token` if
+        `next_page_token` is not None.
+
+        Args:
+            context: Stream partition or context dictionary.
+            next_page_token: Token, page number or any request argument to request the
+                next page of data.
+
+        Returns:
+            Build a request with the stream's URL, path, query parameters,
+            HTTP headers and authenticator.
+        """
+        http_method = self.rest_method
+        url: str = self.get_url(context)
+        params: dict | str = self.get_url_params(
+            context, next_page_token, start_timestamp, end_timestamp
+        )
+        request_data = self.prepare_request_payload(context, next_page_token)
+        headers = self.http_headers
+
+        return self.build_prepared_request(
+            method=http_method,
+            url=url,
+            params=params,
+            headers=headers,
+            json=request_data,
+        )
+
+    def request_records(self, context: dict | None) -> t.Iterable[dict]:
+        """Request records from REST endpoint(s), returning response records.
+
+        If pagination is detected, pages will be recursed automatically.
+
+        Args:
+            context: Stream partition or context dictionary.
+
+        Yields:
+            An item for every record in the response.
+        """
+        decorated_request = self.request_decorator(self._request)
+
+        with metrics.http_request_counter(self.name, self.path) as request_counter:
+            request_counter.context = context
+            start_timestamp = isoparse(self.start_date)
+            start_timestamp = start_timestamp.replace(tzinfo=pytz.timezone("UTC"))
+            end_timestamp = isoparse(self.end_date)
+            end_timestamp = end_timestamp.replace(tzinfo=pytz.timezone("UTC"))
+            self.logger.info(
+                f"Beginning timestamp is: {start_timestamp} and end timestamp is: {end_timestamp}"
+            )
+
+            for start, end in self.date_range(
+                start_timestamp,
+                end_timestamp,
+                interval_in_days=self.config["time_increment_days"],
+            ):
+                paginator = self.get_new_paginator()
+                while not paginator.finished:
+                    self.logger.info(f"Getting data from {start} to {end}")
+                    prepared_request = self.prepare_request(
+                        context,
+                        next_page_token=paginator.current_value,
+                        start_timestamp=start,
+                        end_timestamp=end,
+                    )
+                    resp = decorated_request(prepared_request, context)
+                    request_counter.increment()
+                    self.update_sync_costs(prepared_request, resp, context)
+                    yield from self.parse_response(resp)
+
+                    paginator.advance(resp)
+
+    def post_process(
+        self,
+        row: dict,
+        context: dict | None = None,  # noqa: ARG002
+    ) -> dict | None:
+        if "unique_inline_link_clicks" in row:
+            row["unique_inline_link_clicks"] = int(row["unique_inline_link_clicks"])
+        if "inline_link_clicks" in row:
+            row["inline_link_clicks"] = int(row["inline_link_clicks"])
+        if "impressions" in row:
+            row["impressions"] = int(row["impressions"])
+        if "reach" in row:
+            row["reach"] = int(row["reach"])
+        return row
+    
+
+class AdsetsInsightsHourlyStream(FacebookStream):
+    """https://developers.facebook.com/docs/marketing-api/insights."""
+
+    """
+    columns: columns which will be added to fields parameter in api
+    name: stream name
+    account_id: facebook account
+    path: path which will be added to api url in client.py
+    schema: instream schema
+    tap_stream_id = stream id
+    """
+
+    columns = [
+        "account_id",
+        "adset_id",
+        "adset_name",
+        "campaign_id",
+        "campaign_name",
+        "date_start",
+        "date_stop",
+        "clicks",
+        "account_name",
+        "inline_link_clicks",
+        "spend",
+        "objective",
+        "impressions",
+        "reach",
+        "unique_clicks",
+    ]
+
+    columns_remaining = [
+        "unique_actions",
+        "engagement_rate_ranking",
+        "conversion_rate_ranking",
+        "quality_ranking",
+        "inline_post_engagement",
+        "cost_per_inline_link_click",
+        "canvas_avg_view_percent",
+        "canvas_avg_view_time",
+        "outbound_clicks",
+        "social_spend",
+        "frequency",
+        "unique_inline_link_clicks",
+        "unique_outbound_clicks",
+        "video_30_sec_watched_actions",
+        "video_p25_watched_actions",
+        "video_p50_watched_actions",
+        "video_p75_watched_actions",
+        "video_p100_watched_actions",
+        "actions",
+        "action_values",
+        "video_thruplay_watched_actions",
+    ]
+
+    name = "adsetsinsightshourly"
+
+    path = f"/insights?level=adset&fields={columns}"
+
+    primary_keys = [
+        "adset_id",
+        "date_start",
+        "hourly_stats_aggregated_by_advertiser_time_zone",
+    ]
+    replication_keys = ["date_start", "hourly_stats_aggregated_by_advertiser_time_zone"]
+    replication_method = "incremental"
+
+    schema = PropertiesList(
+        Property("clicks", StringType),
+        Property("date_stop", StringType),
+        Property("adset_id", StringType),
+        Property("account_name", StringType),
+        Property("canvas_avg_view_time", StringType),
+        Property("inline_post_engagement", StringType),
+        Property("campaign_name", StringType),
+        Property("inline_link_clicks", IntegerType),
+        Property("campaign_id", StringType),
+        Property("spend", StringType),
+        Property("adset_name", StringType),
+        Property("canvas_avg_view_percent", StringType),
+        Property("account_id", StringType),
+        Property("date_start", DateTimeType),
+        Property("objective", StringType),
+        Property("impressions", IntegerType),
+        Property("reach", IntegerType),
+        Property("unique_clicks", StringType),
+        Property("hourly_stats_aggregated_by_advertiser_time_zone", StringType),
+    ).to_dict()
+
+    tap_stream_id = "adsetsinsightshourly"
+
+    @staticmethod
+    def date_range(start_date, end_date, interval_in_days=1):
+        """
+        Generator function that produces an iterable list of days between the two
+        dates start_date and end_date as a tuple pair of datetimes.
+
+        Args:
+            start_date (datetime): start of period
+            end_date (datetime): end of period
+            interval_in_days (int): interval of days to iter over
+
+        Yields:
+            tuple: daily period
+                * datetime: day within range - interval_in_days
+                * datetime: day within range + interval_in_days
+
+        """
+        current_date = start_date
+        while current_date < end_date:
+            interval_start = current_date
+            interval_end = current_date + timedelta(days=interval_in_days)
+
+            if interval_end > end_date:
+                interval_end = end_date
+
+            yield interval_start.strftime("%Y-%m-%d"), interval_end.strftime("%Y-%m-%d")
+            current_date = interval_end
+
+    def get_url_params(
+        self,
+        context: dict | None,  # noqa: ARG002
+        next_page_token: t.Any | None,
+        start_timestamp: str,
+        end_timestamp: str,
+    ) -> dict[str, t.Any]:
+        """Return a dictionary of values to be used in URL parameterization.
+
+        Args:
+            context: The stream context.
+            next_page_token: The next page index or value.
+
+        Returns:
+            A dictionary of URL query parameters.
+        """
+        params: dict = {}
+        params["limit"] = 10
+        if next_page_token is not None:
+            params["after"] = next_page_token
+        if self.replication_key:
+            params["sort"] = "asc"
+            params["order_by"] = self.replication_key
+
+        self.logger.info(f" tap_states: {self.tap_state}")
+
+        params["time_range"] = (
+            "{" + f"'since': '{start_timestamp}','until': '{end_timestamp}'" + "}"
+        )
+        params["time_increment"] = self.config["time_increment_days"]
+        params["breakdowns"] = "hourly_stats_aggregated_by_advertiser_time_zone"
+        params["use_account_attribution_setting"] = True
+
+        return params
+
+    def prepare_request(
+        self, context: Optional[dict], next_page_token, start_timestamp, end_timestamp
+    ) -> requests.PreparedRequest:
+        """Prepare a request object for this stream.
+
+        If partitioning is supported, the `context` object will contain the partition
+        definitions. Pagination information can be parsed from `next_page_token` if
+        `next_page_token` is not None.
+
+        Args:
+            context: Stream partition or context dictionary.
+            next_page_token: Token, page number or any request argument to request the
+                next page of data.
+
+        Returns:
+            Build a request with the stream's URL, path, query parameters,
+            HTTP headers and authenticator.
+        """
+        http_method = self.rest_method
+        url: str = self.get_url(context)
+        params: dict | str = self.get_url_params(
+            context, next_page_token, start_timestamp, end_timestamp
+        )
+        
+        request_data = self.prepare_request_payload(context, next_page_token)
+        headers = self.http_headers
+
+        return self.build_prepared_request(
+            method=http_method,
+            url=url,
+            params=params,
+            headers=headers,
+            json=request_data,
+        )
+
+    def request_records(self, context: dict | None) -> t.Iterable[dict]:
+        """Request records from REST endpoint(s), returning response records.
+
+        If pagination is detected, pages will be recursed automatically.
+
+        Args:
+            context: Stream partition or context dictionary.
+
+        Yields:
+            An item for every record in the response.
+        """
+        decorated_request = self.request_decorator(self._request)
+
+        with metrics.http_request_counter(self.name, self.path) as request_counter:
+            request_counter.context = context
+            start_timestamp = isoparse(self.start_date)
+            start_timestamp = start_timestamp.replace(tzinfo=pytz.timezone("UTC"))
+            end_timestamp = isoparse(self.end_date)
+            end_timestamp = end_timestamp.replace(tzinfo=pytz.timezone("UTC"))
+            self.logger.info(
+                f"Beginning timestamp is: {start_timestamp} and end timestamp is: {end_timestamp}"
+            )
+
+            for start, end in self.date_range(
+                start_timestamp,
+                end_timestamp,
+                interval_in_days=self.config["time_increment_days"],
+            ):
+                paginator = self.get_new_paginator()
+                while not paginator.finished:
+                    self.logger.info(f"Getting data from {start} to {end}")
+                    prepared_request = self.prepare_request(
+                        context,
+                        next_page_token=paginator.current_value,
+                        start_timestamp=start,
+                        end_timestamp=end,
+                    )
+                    resp = decorated_request(prepared_request, context)
+                    throttle_headers = json.loads(
+                        resp.headers["x-fb-ads-insights-throttle"]
+                    )
+                    if throttle_headers["app_id_util_pct"] >= 99.0:
+                        self.logger.info(
+                            f"Getting close to the rate limit. Cooling off for a minute..."
+                        )
+                        time.sleep(60)
+                    request_counter.increment()
+                    self.update_sync_costs(prepared_request, resp, context)
+                    yield from self.parse_response(resp)
+
+                    paginator.advance(resp)
+
+    def post_process(
+        self,
+        row: dict,
+        context: dict | None = None,  # noqa: ARG002
+    ) -> dict | None:
+        if "unique_inline_link_clicks" in row:
+            row["unique_inline_link_clicks"] = int(row["unique_inline_link_clicks"])
+        if "inline_link_clicks" in row:
+            row["inline_link_clicks"] = int(row["inline_link_clicks"])
+        if "impressions" in row:
+            row["impressions"] = int(row["impressions"])
+        if "reach" in row:
+            row["reach"] = int(row["reach"])
+        return row
 
 
 class CampaignsInsightsStream(FacebookStream):
@@ -1129,6 +1679,7 @@ class CampaignsInsightsHourlyStream(FacebookStream):
                         end_timestamp=end,
                     )
                     resp = decorated_request(prepared_request, context)
+                    self.logger.info(f"response is: {resp.json()}")
                     throttle_headers = json.loads(
                         resp.headers["x-fb-ads-insights-throttle"]
                     )
