@@ -53,29 +53,29 @@ class AdsInsightsStream(FacebookStream):
         "date_start",
         "date_stop",
         "clicks",
-        "frequency",
         "account_name",
         "unique_inline_link_clicks",
-        "inline_post_engagement",
         "inline_link_clicks",
         "canvas_avg_view_time",
         "spend",
         "unique_clicks",
-        "social_spend",
-        "reach",
-        "canvas_avg_view_percent",
-        "objective",
-        "quality_ranking",
-        "engagement_rate_ranking",
-        "conversion_rate_ranking",
         "impressions",
-        "cost_per_inline_link_click",
         "video_p100_watched_actions",
         "video_thruplay_watched_actions",
         "action_values",
     ]
 
     columns_remaining = [
+        "canvas_avg_view_percent",
+        "inline_post_engagement",
+        "social_spend",
+        "reach",
+        "objective",
+        "quality_ranking",
+        "engagement_rate_ranking",
+        "conversion_rate_ranking",
+        "cost_per_inline_link_click",
+        "frequency",
         "unique_actions",
         "outbound_clicks",
         "unique_outbound_clicks",
@@ -96,22 +96,9 @@ class AdsInsightsStream(FacebookStream):
     schema = PropertiesList(
         Property("clicks", StringType),
         Property("date_stop", StringType),
-        Property(
-            "website_ctr",
-            ArrayType(
-                ObjectType(
-                    Property("value", StringType),
-                    Property("action_destination", StringType),
-                    Property("action_target_id", StringType),
-                    Property("action_type", StringType),
-                ),
-            ),
-        ),
-        Property("frequency", StringType),
         Property("account_name", StringType),
         Property("canvas_avg_view_time", StringType),
         Property("unique_inline_link_clicks", IntegerType),
-        Property("inline_post_engagement", StringType),
         Property("ad_name", StringType),
         Property("ad_id", StringType),
         Property("adset_name", StringType),
@@ -122,16 +109,9 @@ class AdsInsightsStream(FacebookStream):
         Property("campaign_id", StringType),
         Property("spend", StringType),
         Property("unique_clicks", StringType),
-        Property("social_spend", StringType),
-        Property("canvas_avg_view_percent", StringType),
         Property("account_id", StringType),
         Property("date_start", DateTimeType),
-        Property("objective", StringType),
-        Property("quality_ranking", StringType),
-        Property("engagement_rate_ranking", StringType),
-        Property("conversion_rate_ranking", StringType),
         Property("impressions", IntegerType),
-        Property("reach", IntegerType),
         Property(
             "video_p100_watched_actions",
             ArrayType(
@@ -353,13 +333,13 @@ class AdsInsightsHourlyStream(FacebookStream):
         "account_name",
         "inline_link_clicks",
         "spend",
-        "objective",
         "impressions",
-        "reach",
         "unique_clicks",
     ]
 
     columns_remaining = [
+        "reach",
+        "objective",
         "unique_actions",
         "engagement_rate_ranking",
         "conversion_rate_ranking",
@@ -507,7 +487,7 @@ class AdsInsightsHourlyStream(FacebookStream):
         params: dict | str = self.get_url_params(
             context, next_page_token, start_timestamp, end_timestamp
         )
-        
+
         request_data = self.prepare_request_payload(context, next_page_token)
         headers = self.http_headers
 
@@ -585,7 +565,7 @@ class AdsInsightsHourlyStream(FacebookStream):
         if "reach" in row:
             row["reach"] = int(row["reach"])
         return row
-    
+
 
 class AdsetsInsightsStream(FacebookStream):
     """https://developers.facebook.com/docs/marketing-api/insights."""
@@ -609,14 +589,20 @@ class AdsetsInsightsStream(FacebookStream):
         "date_start",
         "date_stop",
         "clicks",
-        "frequency",
         "account_name",
         "unique_inline_link_clicks",
-        "inline_post_engagement",
         "inline_link_clicks",
         "canvas_avg_view_time",
         "spend",
         "unique_clicks",
+        "impressions",
+        "video_p100_watched_actions",
+        "video_thruplay_watched_actions",
+        "action_values",
+    ]
+
+    columns_remaining = [
+        "inline_post_engagement",
         "social_spend",
         "reach",
         "canvas_avg_view_percent",
@@ -624,14 +610,8 @@ class AdsetsInsightsStream(FacebookStream):
         "quality_ranking",
         "engagement_rate_ranking",
         "conversion_rate_ranking",
-        "impressions",
+        "frequency",
         "cost_per_inline_link_click",
-        "video_p100_watched_actions",
-        "video_thruplay_watched_actions",
-        "action_values",
-    ]
-
-    columns_remaining = [
         "unique_actions",
         "outbound_clicks",
         "unique_outbound_clicks",
@@ -652,22 +632,9 @@ class AdsetsInsightsStream(FacebookStream):
     schema = PropertiesList(
         Property("clicks", StringType),
         Property("date_stop", StringType),
-        Property(
-            "website_ctr",
-            ArrayType(
-                ObjectType(
-                    Property("value", StringType),
-                    Property("action_destination", StringType),
-                    Property("action_target_id", StringType),
-                    Property("action_type", StringType),
-                ),
-            ),
-        ),
-        Property("frequency", StringType),
         Property("account_name", StringType),
         Property("canvas_avg_view_time", StringType),
         Property("unique_inline_link_clicks", IntegerType),
-        Property("inline_post_engagement", StringType),
         Property("adset_name", StringType),
         Property("adset_id", StringType),
         Property("campaign_name", StringType),
@@ -676,16 +643,9 @@ class AdsetsInsightsStream(FacebookStream):
         Property("campaign_id", StringType),
         Property("spend", StringType),
         Property("unique_clicks", StringType),
-        Property("social_spend", StringType),
-        Property("canvas_avg_view_percent", StringType),
         Property("account_id", StringType),
         Property("date_start", DateTimeType),
-        Property("objective", StringType),
-        Property("quality_ranking", StringType),
-        Property("engagement_rate_ranking", StringType),
-        Property("conversion_rate_ranking", StringType),
         Property("impressions", IntegerType),
-        Property("reach", IntegerType),
         Property(
             "video_p100_watched_actions",
             ArrayType(
@@ -879,7 +839,7 @@ class AdsetsInsightsStream(FacebookStream):
         if "reach" in row:
             row["reach"] = int(row["reach"])
         return row
-    
+
 
 class AdsetsInsightsHourlyStream(FacebookStream):
     """https://developers.facebook.com/docs/marketing-api/insights."""
@@ -1057,7 +1017,7 @@ class AdsetsInsightsHourlyStream(FacebookStream):
         params: dict | str = self.get_url_params(
             context, next_page_token, start_timestamp, end_timestamp
         )
-        
+
         request_data = self.prepare_request_payload(context, next_page_token)
         headers = self.http_headers
 
@@ -1157,23 +1117,13 @@ class CampaignsInsightsStream(FacebookStream):
         "date_start",
         "date_stop",
         "clicks",
-        "frequency",
         "account_name",
         "unique_inline_link_clicks",
-        "inline_post_engagement",
         "inline_link_clicks",
         "canvas_avg_view_time",
         "spend",
         "unique_clicks",
-        "social_spend",
-        "reach",
-        "canvas_avg_view_percent",
-        "objective",
-        "quality_ranking",
-        "engagement_rate_ranking",
-        "conversion_rate_ranking",
         "impressions",
-        "cost_per_inline_link_click",
         "video_p100_watched_actions",
         "video_thruplay_watched_actions",
         "action_values",
@@ -1181,6 +1131,16 @@ class CampaignsInsightsStream(FacebookStream):
 
     columns_remaining = [
         "unique_actions",
+        "inline_post_engagement",
+        "cost_per_inline_link_click",
+        "social_spend",
+        "reach",
+        "canvas_avg_view_percent",
+        "objective",
+        "quality_ranking",
+        "engagement_rate_ranking",
+        "conversion_rate_ranking",
+        "frequency",
         "outbound_clicks",
         "unique_outbound_clicks",
         "video_30_sec_watched_actions",
@@ -1200,37 +1160,17 @@ class CampaignsInsightsStream(FacebookStream):
     schema = PropertiesList(
         Property("clicks", StringType),
         Property("date_stop", StringType),
-        Property(
-            "website_ctr",
-            ArrayType(
-                ObjectType(
-                    Property("value", StringType),
-                    Property("action_destination", StringType),
-                    Property("action_target_id", StringType),
-                    Property("action_type", StringType),
-                ),
-            ),
-        ),
-        Property("frequency", StringType),
         Property("account_name", StringType),
         Property("canvas_avg_view_time", StringType),
         Property("unique_inline_link_clicks", IntegerType),
-        Property("inline_post_engagement", StringType),
         Property("campaign_name", StringType),
         Property("inline_link_clicks", IntegerType),
         Property("campaign_id", StringType),
         Property("spend", StringType),
         Property("unique_clicks", StringType),
-        Property("social_spend", StringType),
-        Property("canvas_avg_view_percent", StringType),
         Property("account_id", StringType),
         Property("date_start", DateTimeType),
-        Property("objective", StringType),
-        Property("quality_ranking", StringType),
-        Property("engagement_rate_ranking", StringType),
-        Property("conversion_rate_ranking", StringType),
         Property("impressions", IntegerType),
-        Property("reach", IntegerType),
         Property(
             "video_p100_watched_actions",
             ArrayType(
@@ -1449,9 +1389,7 @@ class CampaignsInsightsHourlyStream(FacebookStream):
         "account_name",
         "inline_link_clicks",
         "spend",
-        "objective",
         "impressions",
-        "reach",
         "video_p100_watched_actions",
         "video_thruplay_watched_actions",
         "action_values",
@@ -1459,6 +1397,8 @@ class CampaignsInsightsHourlyStream(FacebookStream):
 
     columns_remaining = [
         "unique_actions",
+        "objective",
+        "reach",
         "engagement_rate_ranking",
         "conversion_rate_ranking",
         "quality_ranking",
@@ -1500,9 +1440,7 @@ class CampaignsInsightsHourlyStream(FacebookStream):
         Property("spend", StringType),
         Property("account_id", StringType),
         Property("date_start", DateTimeType),
-        Property("objective", StringType),
         Property("impressions", IntegerType),
-        Property("reach", IntegerType),
         Property(
             "video_p100_watched_actions",
             ArrayType(
