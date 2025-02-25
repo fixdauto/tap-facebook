@@ -44,7 +44,7 @@ class FacebookStream(RESTStream):
         else:
             start_date = datetime.utcnow().replace(
                 tzinfo=pytz.timezone("UTC")
-            ) - timedelta(14)
+            ) - timedelta(8)
             return start_date.strftime("%Y-%m-%d")
 
     @property
