@@ -160,14 +160,17 @@ class FacebookStream(RESTStream):
                 f"{response.status_code} Client Error: "
                 f"{response.content!s} (Reason: {response.reason}) for path: {full_path}"
             )
-            # Retry on reaching rate limit
-            if (
-                response.status_code == HTTPStatus.BAD_REQUEST
-                and "too many calls" in str(response.content).lower()
-            ) or (
-                response.status_code == HTTPStatus.BAD_REQUEST
-                and "request limit reached" in str(response.content).lower()
-            ):
+            # Retry on reaching rate limit or application request limit
+            content_lower = str(response.content).lower()
+            is_rate_limit = (
+                (response.status_code == HTTPStatus.BAD_REQUEST and
+                 ("too many calls" in content_lower or "request limit reached" in content_lower))
+                or (response.status_code == HTTPStatus.FORBIDDEN and
+                    ("application request limit reached" in content_lower or
+                     "too many calls" in content_lower or
+                     "request limit reached" in content_lower))
+            )
+            if is_rate_limit:
                 raise RetriableAPIError(msg, response)
 
             raise FatalAPIError(msg)
