@@ -84,6 +84,12 @@ class TapFacebook(Tap):
             th.DateTimeType,
             description="The latest record date to sync",
         ),
+        th.Property(
+            "insights_page_size",
+            th.IntegerType,
+            description="The number of results to fetch per page for insights streams",
+            default=100,
+        ),
     ).to_dict()
 
     def discover_streams(self) -> list[streams.FacebookStream]:

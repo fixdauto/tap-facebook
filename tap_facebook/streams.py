@@ -197,7 +197,7 @@ class AdsInsightsStream(FacebookStream):
             A dictionary of URL query parameters.
         """
         params: dict = {}
-        params["limit"] = 25
+        params["limit"] = self.config.get("insights_page_size", 100)
         if next_page_token is not None:
             params["after"] = next_page_token
         if self.replication_key:
@@ -446,7 +446,7 @@ class AdsInsightsHourlyStream(FacebookStream):
             A dictionary of URL query parameters.
         """
         params: dict = {}
-        params["limit"] = 10
+        params["limit"] = self.config.get("insights_page_size", 100)
         if next_page_token is not None:
             params["after"] = next_page_token
         if self.replication_key:
@@ -731,7 +731,7 @@ class AdsetsInsightsStream(FacebookStream):
             A dictionary of URL query parameters.
         """
         params: dict = {}
-        params["limit"] = 25
+        params["limit"] = self.config.get("insights_page_size", 100)
         if next_page_token is not None:
             params["after"] = next_page_token
         if self.replication_key:
@@ -976,7 +976,7 @@ class AdsetsInsightsHourlyStream(FacebookStream):
             A dictionary of URL query parameters.
         """
         params: dict = {}
-        params["limit"] = 10
+        params["limit"] = self.config.get("insights_page_size", 100)
         if next_page_token is not None:
             params["after"] = next_page_token
         if self.replication_key:
@@ -1256,7 +1256,7 @@ class CampaignsInsightsStream(FacebookStream):
             A dictionary of URL query parameters.
         """
         params: dict = {}
-        params["limit"] = 20
+        params["limit"] = self.config.get("insights_page_size", 100)
         if next_page_token is not None:
             params["after"] = next_page_token
         if self.replication_key:
@@ -1527,7 +1527,7 @@ class CampaignsInsightsHourlyStream(FacebookStream):
             A dictionary of URL query parameters.
         """
         params: dict = {}
-        params["limit"] = 20
+        params["limit"] = self.config.get("insights_page_size", 100)
         if next_page_token is not None:
             params["after"] = next_page_token
         if self.replication_key:
