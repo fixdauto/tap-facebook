@@ -143,42 +143,52 @@ class FacebookStream(RESTStream):
             RetriableAPIError: If the request is retriable.
         """
         full_path = urlparse(response.url).path
-        if response.status_code in self.tolerated_http_errors:
+        status = response.status_code
+        content = response.content
+        content_lower = content.decode("utf-8", errors="ignore").lower()
+
+        if status in self.tolerated_http_errors:
             msg = (
-                f"{response.status_code} Tolerated Status Code "
+                f"{status} Tolerated Status Code "
                 f"(Reason: {response.reason}) for path: {full_path}"
             )
             self.logger.info(msg)
             return
 
-        if (
-            HTTPStatus.BAD_REQUEST
-            <= response.status_code
-            < HTTPStatus.INTERNAL_SERVER_ERROR
-        ):
+        if HTTPStatus.BAD_REQUEST <= status < HTTPStatus.INTERNAL_SERVER_ERROR:
             msg = (
-                f"{response.status_code} Client Error: "
-                f"{response.content!s} (Reason: {response.reason}) for path: {full_path}"
+                f"{status} Client Error: "
+                f"{content!s} (Reason: {response.reason}) for path: {full_path}"
             )
-            # Retry on reaching rate limit or application request limit
-            content_lower = str(response.content).lower()
+
             is_rate_limit = (
-                (response.status_code == HTTPStatus.BAD_REQUEST and
+                (status == HTTPStatus.BAD_REQUEST and
                  ("too many calls" in content_lower or "request limit reached" in content_lower))
-                or (response.status_code == HTTPStatus.FORBIDDEN and
+                or (status == HTTPStatus.FORBIDDEN and
                     ("application request limit reached" in content_lower or
                      "too many calls" in content_lower or
                      "request limit reached" in content_lower))
             )
-            if is_rate_limit:
+
+            is_service_unavail = False
+            try:
+                err = response.json().get("error", {})
+                if err.get("error_subcode") == 1504018 or \
+                   "service temporarily unavailable" in err.get("message", "").lower():
+                    is_service_unavail = True
+            except ValueError:
+                if "service temporarily unavailable" in content_lower:
+                    is_service_unavail = True
+
+            if is_rate_limit or is_service_unavail:
                 raise RetriableAPIError(msg, response)
 
             raise FatalAPIError(msg)
 
-        if response.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR:
+        if status >= HTTPStatus.INTERNAL_SERVER_ERROR:
             msg = (
-                f"{response.status_code} Server Error: "
-                f"{response.content!s} (Reason: {response.reason}) for path: {full_path}"
+                f"{status} Server Error: "
+                f"{content!s} (Reason: {response.reason}) for path: {full_path}"
             )
             raise RetriableAPIError(msg, response)
 
