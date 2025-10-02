@@ -66,6 +66,7 @@ class AdsInsightsStream(FacebookStream):
         "video_p75_watched_actions",
         "video_p100_watched_actions",
         "video_thruplay_watched_actions",
+        "video_time_watched_actions",
         "action_values",
     ]
 
@@ -151,6 +152,15 @@ class AdsInsightsStream(FacebookStream):
         ),
         Property(
             "video_thruplay_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
+            "video_time_watched_actions",
             ArrayType(
                 ObjectType(
                     Property("action_type", StringType),
