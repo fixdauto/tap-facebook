@@ -60,6 +60,10 @@ class AdsInsightsStream(FacebookStream):
         "spend",
         "unique_clicks",
         "impressions",
+        "reach",
+        "video_p25_watched_actions",
+        "video_p50_watched_actions",
+        "video_p75_watched_actions",
         "video_p100_watched_actions",
         "video_thruplay_watched_actions",
         "action_values",
@@ -69,7 +73,6 @@ class AdsInsightsStream(FacebookStream):
         "canvas_avg_view_percent",
         "inline_post_engagement",
         "social_spend",
-        "reach",
         "objective",
         "quality_ranking",
         "engagement_rate_ranking",
@@ -80,9 +83,6 @@ class AdsInsightsStream(FacebookStream):
         "outbound_clicks",
         "unique_outbound_clicks",
         "video_30_sec_watched_actions",
-        "video_p25_watched_actions",
-        "video_p50_watched_actions",
-        "video_p75_watched_actions",
     ]
 
     name = "adsinsights"
@@ -112,6 +112,34 @@ class AdsInsightsStream(FacebookStream):
         Property("account_id", StringType),
         Property("date_start", DateTimeType),
         Property("impressions", IntegerType),
+        Property("reach", IntegerType),
+        Property(
+            "video_p25_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
+            "video_p50_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
+            "video_p75_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
         Property(
             "video_p100_watched_actions",
             ArrayType(
@@ -1393,6 +1421,7 @@ class CampaignsInsightsHourlyStream(FacebookStream):
         "video_p100_watched_actions",
         "video_thruplay_watched_actions",
         "action_values",
+        'cost_per_15_sec_video_view'
     ]
 
     columns_remaining = [
@@ -1441,6 +1470,7 @@ class CampaignsInsightsHourlyStream(FacebookStream):
         Property("account_id", StringType),
         Property("date_start", DateTimeType),
         Property("impressions", IntegerType),
+        Property("thruplays", IntegerType),
         Property(
             "video_p100_watched_actions",
             ArrayType(
