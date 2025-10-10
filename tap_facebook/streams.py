@@ -1162,8 +1162,13 @@ class CampaignsInsightsStream(FacebookStream):
         "spend",
         "unique_clicks",
         "impressions",
+        "reach",
+        "video_p25_watched_actions",
+        "video_p50_watched_actions",
+        "video_p75_watched_actions",
         "video_p100_watched_actions",
         "video_thruplay_watched_actions",
+        "video_avg_time_watched_actions",
         "action_values",
     ]
 
@@ -1172,7 +1177,6 @@ class CampaignsInsightsStream(FacebookStream):
         "inline_post_engagement",
         "cost_per_inline_link_click",
         "social_spend",
-        "reach",
         "canvas_avg_view_percent",
         "objective",
         "quality_ranking",
@@ -1182,9 +1186,6 @@ class CampaignsInsightsStream(FacebookStream):
         "outbound_clicks",
         "unique_outbound_clicks",
         "video_30_sec_watched_actions",
-        "video_p25_watched_actions",
-        "video_p50_watched_actions",
-        "video_p75_watched_actions",
     ]
 
     name = "campaignsinsights"
@@ -1209,6 +1210,43 @@ class CampaignsInsightsStream(FacebookStream):
         Property("account_id", StringType),
         Property("date_start", DateTimeType),
         Property("impressions", IntegerType),
+        Property("reach", IntegerType),
+        Property(
+            "video_avg_time_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
+            "video_p25_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
+            "video_p50_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
+        Property(
+            "video_p75_watched_actions",
+            ArrayType(
+                ObjectType(
+                    Property("action_type", StringType),
+                    Property("value", StringType),
+                ),
+            ),
+        ),
         Property(
             "video_p100_watched_actions",
             ArrayType(
