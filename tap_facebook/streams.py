@@ -1726,6 +1726,213 @@ class CampaignsInsightsHourlyStream(FacebookStream):
         return row
 
 
+class AccountsInsightsStream(FacebookStream):
+    """https://developers.facebook.com/docs/marketing-api/insights."""
+
+    """
+    columns: columns which will be added to fields parameter in api
+    name: stream name
+    account_id: facebook account
+    path: path which will be added to api url in client.py
+    schema: instream schema
+    tap_stream_id = stream id
+    """
+
+    columns = [
+        "account_id",
+        "account_name",
+        "date_start",
+        "date_stop",
+        "impressions",
+        "reach",
+    ]
+
+    columns_remaining = [
+        "unique_actions",
+        "inline_post_engagement",
+        "cost_per_inline_link_click",
+        "social_spend",
+        "canvas_avg_view_percent",
+        "objective",
+        "quality_ranking",
+        "engagement_rate_ranking",
+        "conversion_rate_ranking",
+        "frequency",
+        "outbound_clicks",
+        "unique_outbound_clicks",
+        "video_30_sec_watched_actions",
+    ]
+
+    name = "accountsinsights"
+
+    path = f"/insights?level=account&fields={columns}"
+
+    primary_keys = ["account_id", "date_start"]
+    replication_keys = ["date_start"]
+    replication_method = "incremental"
+
+    schema = PropertiesList(
+        Property("date_stop", StringType),
+        Property("account_name", StringType),
+        Property("account_id", StringType),
+        Property("date_start", DateTimeType),
+        Property("impressions", IntegerType),
+        Property("reach", IntegerType),
+    ).to_dict()
+
+    tap_stream_id = "accountsinsights"
+
+    @staticmethod
+    def date_range(start_date, end_date, interval_in_days=1):
+        """
+        Generator function that produces an iterable list of days between the two
+        dates start_date and end_date as a tuple pair of datetimes.
+
+        Args:
+            start_date (datetime): start of period
+            end_date (datetime): end of period
+            interval_in_days (int): interval of days to iter over
+
+        Yields:
+            tuple: daily period
+                * datetime: day within range - interval_in_days
+                * datetime: day within range + interval_in_days
+
+        """
+        current_date = start_date
+        while current_date < end_date:
+            interval_start = current_date
+            interval_end = current_date + timedelta(days=interval_in_days)
+
+            if interval_end > end_date:
+                interval_end = end_date
+
+            yield interval_start.strftime("%Y-%m-%d"), interval_end.strftime("%Y-%m-%d")
+            current_date = interval_end
+
+    def get_url_params(
+        self,
+        context: dict | None,  # noqa: ARG002
+        next_page_token: t.Any | None,
+        start_timestamp: str,
+        end_timestamp: str,
+    ) -> dict[str, t.Any]:
+        """Return a dictionary of values to be used in URL parameterization.
+
+        Args:
+            context: The stream context.
+            next_page_token: The next page index or value.
+
+        Returns:
+            A dictionary of URL query parameters.
+        """
+        params: dict = {}
+        params["limit"] = self.config.get("insights_page_size", 100)
+        if next_page_token is not None:
+            params["after"] = next_page_token
+        if self.replication_key:
+            params["sort"] = "asc"
+            params["order_by"] = self.replication_key
+
+        self.logger.info(f" tap_states: {self.tap_state}")
+
+        params["time_range"] = (
+            "{" + f"'since': '{start_timestamp}','until': '{end_timestamp}'" + "}"
+        )
+        params["time_increment"] = self.config["time_increment_days"]
+
+        return params
+
+    def prepare_request(
+        self, context: Optional[dict], next_page_token, start_timestamp, end_timestamp
+    ) -> requests.PreparedRequest:
+        """Prepare a request object for this stream.
+
+        If partitioning is supported, the `context` object will contain the partition
+        definitions. Pagination information can be parsed from `next_page_token` if
+        `next_page_token` is not None.
+
+        Args:
+            context: Stream partition or context dictionary.
+            next_page_token: Token, page number or any request argument to request the
+                next page of data.
+
+        Returns:
+            Build a request with the stream's URL, path, query parameters,
+            HTTP headers and authenticator.
+        """
+        http_method = self.rest_method
+        url: str = self.get_url(context)
+        params: dict | str = self.get_url_params(
+            context, next_page_token, start_timestamp, end_timestamp
+        )
+        request_data = self.prepare_request_payload(context, next_page_token)
+        headers = self.http_headers
+
+        return self.build_prepared_request(
+            method=http_method,
+            url=url,
+            params=params,
+            headers=headers,
+            json=request_data,
+        )
+
+    def request_records(self, context: dict | None) -> t.Iterable[dict]:
+        """Request records from REST endpoint(s), returning response records.
+
+        If pagination is detected, pages will be recursed automatically.
+
+        Args:
+            context: Stream partition or context dictionary.
+
+        Yields:
+            An item for every record in the response.
+        """
+        decorated_request = self.request_decorator(self._request)
+
+        with metrics.http_request_counter(self.name, self.path) as request_counter:
+            request_counter.context = context
+            start_timestamp = isoparse(self.start_date)
+            start_timestamp = start_timestamp.replace(tzinfo=pytz.timezone("UTC"))
+            end_timestamp = isoparse(self.end_date)
+            end_timestamp = end_timestamp.replace(tzinfo=pytz.timezone("UTC"))
+            self.logger.info(
+                f"Beginning timestamp is: {start_timestamp} and end timestamp is: {end_timestamp}"
+            )
+
+            for start, end in self.date_range(
+                start_timestamp,
+                end_timestamp,
+                interval_in_days=self.config["time_increment_days"],
+            ):
+                paginator = self.get_new_paginator()
+                while not paginator.finished:
+                    self.logger.info(f"Getting data from {start} to {end}")
+                    prepared_request = self.prepare_request(
+                        context,
+                        next_page_token=paginator.current_value,
+                        start_timestamp=start,
+                        end_timestamp=end,
+                    )
+                    resp = decorated_request(prepared_request, context)
+                    request_counter.increment()
+                    self.update_sync_costs(prepared_request, resp, context)
+                    yield from self.parse_response(resp)
+
+                    paginator.advance(resp)
+
+    def post_process(
+        self,
+        row: dict,
+        context: dict | None = None,  # noqa: ARG002
+    ) -> dict | None:
+        if "impressions" in row:
+            row["impressions"] = int(row["impressions"])
+        if "reach" in row:
+            row["reach"] = int(row["reach"])
+        return row
+
+
 # ads stream
 class AdsStream(FacebookStream):
     """Ads stream class.
