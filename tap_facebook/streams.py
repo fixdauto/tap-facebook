@@ -2036,7 +2036,7 @@ class AdsStream(FacebookStream):
                 ObjectType(
                     Property(
                         "application",
-                        ArrayType(ObjectType(Property("items", StringType))),
+                        ArrayType(StringType),
                     ),
                     Property("post", ArrayType(StringType)),
                     Property("conversion_id", ArrayType(StringType)),
